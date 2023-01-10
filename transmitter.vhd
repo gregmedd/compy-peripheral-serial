@@ -50,24 +50,23 @@ architecture Behavioral of transmitter is
 		tx_transmit,
 		tx_parity,
 		tx_stop
-		);
+	);
 
-	signal clk_counter : std_logic_vector (18 downto 0);
+	signal clk_counter : std_logic_vector (18 downto 0) := "0000000000000000000";
 	signal bit_clk : std_logic := '0';
 	signal bit_clk_en : std_logic := '0';
 	signal current_clk_div : std_logic_vector (18 downto 0);
 	
 	signal state : txstate := tx_idle;
 	
-	signal start_bits_remaining : std_logic;
-	signal tx_bits_remaining : std_logic_vector (3 downto 0);
-	signal current_tx_data : std_logic_vector (7 downto 0);
-	signal parity_bits_remaining : std_logic;
-	signal current_tx_parity : std_logic;
-	signal stop_bits_remaining : std_logic_vector (1 downto 0);
+	signal start_bits_remaining : std_logic := '0';
+	signal tx_bits_remaining : std_logic_vector (3 downto 0) := "0000";
+	signal current_tx_data : std_logic_vector (7 downto 0) := "00000000";
+	signal parity_bits_remaining : std_logic := '0';
+	signal current_tx_parity : std_logic := '0';
+	signal stop_bits_remaining : std_logic_vector (1 downto 0) := "00";
 
 begin
-
 	-- Bit clock generator
 	process (clk, bit_clk_en) begin
 		if rising_edge(clk) and bit_clk_en = '1' then
@@ -80,43 +79,29 @@ begin
 			
 		elsif bit_clk_en = '0' then
 			bit_clk <= '0';
+			clk_counter <= "0000000000000000000";
 		end if;
 	end process;
 	
 	-- State machine
-	process (clk, txstart) begin
+	process (clk) begin
 		if rising_edge(clk) then
 			case state is
 			
 				when tx_idle =>
-					if rising_edge(txstart) then
-						clk_counter <= "0000000000000000000";
+					if txstart = '1' then
 						current_clk_div <= clk_div;
-						current_tx_data <= data;
-						start_bits_remaining <= '1';
-						
-						if eight_data = '1' then
-							tx_bits_remaining <= "1000";
-						else
-							tx_bits_remaining <= "0111";
-						end if;
 
 						if parity = "01" then
-							parity_bits_remaining <= '1';
 							current_tx_parity <= data(7) xor data(6) xor data(5) xor data(4) xor data(3) xor data(2) xor data(1) xor data(0);
 						elsif parity = "10" then
-							parity_bits_remaining <= '1';
 							current_tx_parity <= not (data(7) xor data(6) xor data(5) xor data(4) xor data(3) xor data(2) xor data(1) xor data(0));
 						else
-							parity_bits_remaining <= '0';
+							current_tx_parity <= '0';
 						end if;
 						
-						if two_stop = '1' then
-							stop_bits_remaining <= "10";
-						else
-							stop_bits_remaining <= "01";
-						end if;
-						
+						bit_clk_en <= '1';
+						state <= tx_start;
 					end if;
 					
 				when tx_start =>
@@ -140,6 +125,7 @@ begin
 					
 				when tx_stop =>
 					if stop_bits_remaining = "00" then
+						bit_clk_en <= '0';
 						state <= tx_idle;
 					end if;
 					
@@ -148,7 +134,7 @@ begin
 	end process;
 	
 	-- TX bit counter
-	process (bit_clk) begin
+	process (bit_clk, bit_clk_en) begin
 		if falling_edge(bit_clk) then
 			case state is
 				when tx_start =>
@@ -162,11 +148,35 @@ begin
 				when others =>
 					-- do nothing
 			end case;
+		elsif rising_edge(bit_clk_en) then
+			start_bits_remaining <= '1';
+			
+			if eight_data = '1' then
+				tx_bits_remaining <= "1000";
+			else
+				tx_bits_remaining <= "0111";
+			end if;
+
+			if parity = "01" or parity = "10" then
+				parity_bits_remaining <= '1';
+			else
+				parity_bits_remaining <= '0';
+			end if;
+			
+			if two_stop = '1' then
+				stop_bits_remaining <= "10";
+			else
+				stop_bits_remaining <= "01";
+			end if;
 		end if;
 	end process;
 	
 	-- TX data generator
-	process (bit_clk, state) begin
+	process (bit_clk, bit_clk_en, state) begin		
+		if rising_edge(bit_clk_en) then
+			current_tx_data <= data;
+		end if;
+			
 		case state is
 		
 			when tx_idle =>

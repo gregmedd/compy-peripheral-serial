@@ -104,13 +104,26 @@ BEGIN
       wait for clk_period*10;
 
       -- insert stimulus here 
-		clk_div <= "0000000000110110010";
+		clk_div <= "0000000000011011001";
 		eight_data <= '1';
 		data <= "01000001";
 		wait for clk_period;
 		txstart <= '1';
 		wait for clk_period;
 		txstart <= '0';
+		data <= "00000000";
+		wait for 90 us;
+
+		eight_data <= '0';
+		two_stop <= '1';
+		parity <= "01";
+		data <= "00101100";
+		wait for clk_period;
+		txstart <= '1';
+		wait for clk_period;
+		txstart <= '0';
+		data <= "00000000";
+		wait for 90 us;
 
       wait;
    end process;
