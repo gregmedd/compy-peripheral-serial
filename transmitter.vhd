@@ -189,45 +189,70 @@ begin
 		end if;
 	end process;
 	
-	-- TX data generator
-	process (bit_clk, bit_clk_en, state) begin
-			
+	-- TX ready signal generator
+	process (state) begin
 		case state is
-		
 			when tx_idle =>
-				txdata <= '0';
 				txready <= '1';
 				
 			when tx_start =>
-				txdata <= '1';
 				txready <= '0';
-				
-				if falling_edge(bit_clk) then
-					current_tx_data(6 downto 0) <= expected_tx_data(7 downto 1);
-				end if;
-				
-				if rising_edge(bit_clk) then
-					next_tx_bit <= expected_tx_data(0);
-				end if;
 				
 			when tx_transmit =>
-				txdata <= next_tx_bit;
 				txready <= '0';
-				if falling_edge(bit_clk) then
-					current_tx_data(5 downto 0) <= current_tx_data(6 downto 1);
-				end if;
-				
-				if rising_edge(bit_clk) then
-					next_tx_bit <= current_tx_data(0);
-				end if;
 				
 			when tx_parity =>
-				txdata <= current_tx_parity;
 				txready <= '0';
 				
 			when tx_stop =>
-				txdata <= '0';
 				txready <= '0';
+				
+		end case;
+	end process;
+	
+	-- TX data shift register
+	process (bit_clk) begin
+		if falling_edge(bit_clk) then
+			case state is
+			
+				when tx_idle =>
+					-- Nothing to do
+					
+				when tx_start =>
+					current_tx_data(6 downto 0) <= expected_tx_data(7 downto 1);
+					next_tx_bit <= expected_tx_data(0);
+					
+				when tx_transmit =>
+					current_tx_data(5 downto 0) <= current_tx_data(6 downto 1);
+					next_tx_bit <= current_tx_data(0);
+					
+				when tx_parity =>
+					-- Nothing to do
+					
+				when tx_stop =>
+					-- Nothing to do
+					
+			end case;
+		end if;
+	end process;
+	
+	-- TX data generator
+	process (state, next_tx_bit, current_tx_parity) begin
+		case state is
+			when tx_idle =>
+				txdata <= '0';
+				
+			when tx_start =>
+				txdata <= '1';
+				
+			when tx_transmit =>
+				txdata <= next_tx_bit;
+				
+			when tx_parity =>
+				txdata <= current_tx_parity;
+				
+			when tx_stop =>
+				txdata <= '0';
 				
 		end case;
 	end process;
