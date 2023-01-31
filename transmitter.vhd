@@ -70,7 +70,7 @@ architecture Behavioral of transmitter is
     signal stop_bits_sent : std_logic_vector (1 downto 0) := "00";
 
     -- Registers to capture current TX settings on transition from idle to transmit
-    signal expected_start_bits : std_logic := '0';
+    signal expected_start_bits : std_logic := '1';
     signal expected_tx_bits : std_logic_vector (3 downto 0) := "0000";
     signal expected_parity_bits : std_logic := '0';
     signal expected_stop_bits : std_logic_vector (1 downto 0) := "00";
