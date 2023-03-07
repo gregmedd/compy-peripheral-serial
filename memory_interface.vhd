@@ -9,6 +9,7 @@
 ----------------------------------------------------------------------------------
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.STD_LOGIC_MISC.ALL;
 
 -- Uncomment the following library declaration if using
 -- arithmetic functions with Signed or Unsigned values
@@ -21,7 +22,9 @@ use IEEE.STD_LOGIC_1164.ALL;
 --use UNISIM.VComponents.all;
 
 entity uart_memory_io is
+    Generic ( unique_id : STD_LOGIC_VECTOR(13 downto 0) );
     Port ( clk : in  STD_LOGIC;
+           reset : in STD_LOGIC;
 
            -------- Memory Bus Side --------
 
@@ -35,14 +38,13 @@ entity uart_memory_io is
            data : inout STD_LOGIC_VECTOR (31 downto 0);
 
            -- Memory Bus Control Signals
-           read : in STD_LOGIC;
-           write : in STD_LOGIC;
-           ack_rw : out STD_LOGIC;
+           read : inout STD_LOGIC;
+           write : inout STD_LOGIC;
+           ack_rw : inout STD_LOGIC;
 
            -- Memory Bus DMA Control Signals (NOTE: Currently unused)
-           --request_read : out STD_LOGIC;
-           --request_write : out STD_LOGIC;
-           --ack_request : in STD_LOGIC;
+           request_dma : out STD_LOGIC;
+           ack_request : in STD_LOGIC;
 
            -- Interrupt Controller Signals
            interrupt : out STD_LOGIC;
@@ -79,6 +81,13 @@ end uart_memory_io;
 
 architecture Behavioral of uart_memory_io is
 
+    -- ID Register
+    constant id_magic : STD_LOGIC_VECTOR(7 downto 0) := x"A3";
+    constant id_type : STD_LOGIC_VECTOR(7 downto 0) := x"10";
+    constant id_high_parity : STD_LOGIC := not xor_reduce(id_magic & id_type);
+    constant id_low_parity : STD_LOGIC := not xor_reduce((not id_high_parity) & unique_id);
+
+    -- Config Register
     signal reg_eight_data : STD_LOGIC := '0';
     signal reg_two_stop : STD_LOGIC := '0';
     signal reg_parity  : STD_LOGIC_VECTOR(1 downto 0) := "00";
@@ -87,17 +96,30 @@ architecture Behavioral of uart_memory_io is
 
 begin
     -- Inbound memory requests
-    process (clk) begin
-        if rising_edge(clk) then
+    process (clk, reset) begin
+        if reset = '1' then
+            address <= "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
+            data <= "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
+            read <= 'Z';
+            write <= 'Z';
+            ack_rw <= 'L';
+
+            request_dma <= '0';
+            interrupt <= '0';
+
+            tx_start <= '0';
+
+        elsif rising_edge(clk) then
             if read = '1' and pselect = '1' then
+                ack_rw <= '1';
                 case address(7 downto 2) is
 
                     -- ID (0) 0x00
                     when "000000" =>
-                        data(31 downto 24) <= x"A3";
-                        data(23 downto 16) <= x"10";
-                        -- TODO set this with a generic input
-                        data(15 downto 0) <= x"0000";
+                        data(31 downto 24) <= id_magic;
+                        data(23 downto 16) <= id_type;
+                        data(15 downto 14) <= id_high_parity & id_low_parity;
+                        data(13 downto 0) <= unique_id;
 
                     -- Config (8) 0x20
                     when "001000" =>
@@ -114,6 +136,7 @@ begin
                 end case;
 
             elsif write = '1' and pselect = '1' then
+                ack_rw <= '1';
                 case address(7 downto 2) is
 
                     -- Config (8) 0x20
@@ -136,6 +159,14 @@ begin
             else
                 address <= "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
                 data <= "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
+                read <= 'Z';
+                write <= 'Z';
+                ack_rw <= 'L';
+
+                request_dma <= '0';
+                interrupt <= '0';
+
+                tx_start <= '0';
 
             end if;
         end if;

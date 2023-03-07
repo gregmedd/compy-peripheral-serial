@@ -6,7 +6,7 @@ connected to peripheral slot 1.
 
 ## Register Map
 
-### 0x00 - ID
+### 0x00 (0) - ID
 
 The ID register is a standard part of the COMPY-V peripheral specification. It
 is used to detect and identify the peripheral. All IDs have a magic number of
@@ -14,19 +14,41 @@ is used to detect and identify the peripheral. All IDs have a magic number of
 each instance of a peripheral so we can tell them apart.
 
     +------------------+------------------+------------------+------------------+
-    | Magic            | Type             | Unique ID                           |
+    | Magic            | Type             | CK | Unique ID                      |
     +------------------+------------------+------------------+------------------+
     31                                                                          0
 
-     MMMMMMMM   TTTTTTTT   IIIIIIIIIIIIIIII
-    |--------| |--------| |----------------|
-    31 |          |          |             0
-       |          |          |
-       |          |          +-- Randomly assigned unique serial number
-       |          +------------- 0x10 (Character device, subtype UART)
-       +------------------------ 0xA3 (Peripheral magic number, fixed for all peripherals)
+The Magic number field can be used to scan the peripheral bus and identify when
+a peripheral is connected to a given slot. The value of `0xA3` is chosen to have
+a distinctive bit pattern (`0b10100011`).
 
-### 0x04 - Status
+The Type field tells the software what kind of peripheral is present in a given
+slot. Character devices are `0x1X`, with UART being `0x10`.
+
+The Check (CK) bits can be used to verify the contents of the ID register. The
+upper check bit is odd parity for bits 16-31, while the lower check bit is odd
+parity for bit 15 and bits 0-13.
+
+The Unique ID field is randomly assigned and has no specific meaning. Zero is an
+invalid ID value.
+
+     MMMMMMMM   TTTTTTTT   CC IIIIIIIIIIIIII
+    |--------| |--------| |-- --------------|
+    31 |    24 23 |    16 15| 13|           0
+       |          |         |   |
+       |          |         |   +-- Randomly assigned unique serial number
+       |          |         +------ Checksum bits
+       |          +---------------- 0x10 (Character device, subtype UART)
+       +--------------------------- 0xA3 (Peripheral magic number, fixed for all peripherals)
+
+#### Check bit calculation
+
+    b15 = not(xor(b31 ... b16))
+    b14 = not(xor(not(b15), b13 ... b0))
+
+TODO: Probablilites
+
+### 0x04 (1) - Status
 
 Operating status of the UART peripheral.
 
@@ -35,7 +57,7 @@ Operating status of the UART peripheral.
     +------------------+------------------+------------------+------------------+
     31                                                                          0
 
-### 0x08 - Interrupt Status
+### 0x08 (2) - Interrupt Status
 
 Interrupts that have occurred since the last time this register was read. All
 interrupt flags are cleared when this register is read.
@@ -45,7 +67,13 @@ interrupt flags are cleared when this register is read.
     +------------------+------------------+------------------+------------------+
     31                                                                          0
 
-### 0x20 - Config
+### 0x0C (3)
+### 0x10 (4)
+### 0x14 (5)
+### 0x18 (6)
+### 0x1C (7)
+
+### 0x20 (8) - Config
 
     +------------------+------------------+------------------+------------------+
     | Framing          | RESERVED         | Bit Rate                            |
@@ -72,6 +100,22 @@ interrupt flags are cleared when this register is read.
     | Controls                            | Watch Byte 0     | Watch Byte 1     |
     +------------------+------------------+------------------+------------------+
     31                                                                          0
+
+     R T XXXXXXXX 0 1 2 3 4 5   ZZZZZZZZ   OOOOOOOO
+    |- - -------- - - - - - -| |--------| |--------|
+    31 |  |       | | | | | |    |          |      0
+     | |  |       | | | | | |    |          |
+     | |  |       | | | | | |    |          +-- Watch Byte One (1)
+     | |  |       | | | | | |    +------------- Watch Byte Zero (0)
+     | |  |       | | | | | +------------------ Interrupt on watch byte 5 match recieved
+     | |  |       | | | | +-------------------- Interrupt on watch byte 4 match recieved
+     | |  |       | | | +---------------------- Interrupt on watch byte 3 match recieved
+     | |  |       | | +------------------------ Interrupt on watch byte 2 match recieved
+     | |  |       | +-------------------------- Interrupt on watch byte 1 match recieved
+     | |  |       +---------------------------- Interrupt on watch byte 0 match recieved
+     | |  +------------------------------------ RESERVED (future use)
+     | +--------------------------------------- Interrupt on transmit character complete
+     +----------------------------------------- Interrupt on character receive
 
 ### 0x28 - Interrupt Config 1
 
@@ -145,8 +189,8 @@ interrupt flags are cleared when this register is read.
 
 ## Design
 
-        Clock ──────────────────────────────────────────────────────┬────────────┐
-                 ┌────────┐              ┌────────────────┐         │   ┌────────▼────────┐
+        Clock ───────┬──────────────────────────────────────────────┬────────────┐
+                 ┌───▼────┐              ┌────────────────┐         │   ┌────────▼────────┐
                  │        │              │                │ Clock   │   │                 │
        Address   │        │   BitRate    │    Bitrate     │ Divide  │   │                 │
     ◄─────/─────►│   M    ├──────/──────►│    Decoder     ├───/──┬──┼──►│                 ├──────► TXD

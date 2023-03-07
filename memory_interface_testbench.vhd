@@ -40,14 +40,20 @@ ARCHITECTURE behavior OF memory_interface_testbench IS
     -- Component Declaration for the Unit Under Test (UUT)
  
     COMPONENT uart_memory_io
+    GENERIC(
+            unique_id : STD_LOGIC_VECTOR(13 downto 0)
+           );
     PORT(
          clk : IN  std_logic;
+         reset : IN  std_logic;
          pselect : IN  std_logic;
          address : INOUT  std_logic_vector(31 downto 2);
          data : INOUT  std_logic_vector(31 downto 0);
-         read : IN  std_logic;
-         write : IN  std_logic;
-         ack_rw : OUT  std_logic;
+         read : INOUT  std_logic;
+         write : INOUT  std_logic;
+         ack_rw : INOUT  std_logic;
+         request_dma : out std_logic;
+         ack_request : in std_logic;
          interrupt : OUT  std_logic;
          bitrate_valid : IN  std_logic;
          tx_ready : IN  std_logic;
@@ -70,9 +76,9 @@ ARCHITECTURE behavior OF memory_interface_testbench IS
 
    --Inputs
    signal clk : std_logic := '0';
+   signal reset : std_logic := '0';
    signal pselect : std_logic := '0';
-   signal read : std_logic := '0';
-   signal write : std_logic := '0';
+   signal ack_request : std_logic := '0';
    signal bitrate_valid : std_logic := '0';
    signal tx_ready : std_logic := '0';
    signal rx_idle : std_logic := '0';
@@ -84,11 +90,14 @@ ARCHITECTURE behavior OF memory_interface_testbench IS
    signal rx_parity_error : std_logic := '0';
 
 	--BiDirs
-   signal address : std_logic_vector(31 downto 2) := "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
-   signal data : std_logic_vector(31 downto 0) := "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
+   signal read : std_logic := 'L';
+   signal write : std_logic := 'L';
+   signal ack_rw : std_logic := 'L';
+   signal address : std_logic_vector(31 downto 2) := "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
+   signal data : std_logic_vector(31 downto 0) := "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
 
  	--Outputs
-   signal ack_rw : std_logic;
+   signal request_dma : std_logic;
    signal interrupt : std_logic;
    signal eight_data : std_logic;
    signal two_stop : std_logic;
@@ -103,14 +112,19 @@ ARCHITECTURE behavior OF memory_interface_testbench IS
 BEGIN
  
 	-- Instantiate the Unit Under Test (UUT)
-   uut: uart_memory_io PORT MAP (
+   uut: uart_memory_io GENERIC MAP (
+          unique_id => "000000" & x"1A"
+        ) PORT MAP (
           clk => clk,
+          reset => reset,
           pselect => pselect,
           address => address,
           data => data,
           read => read,
           write => write,
           ack_rw => ack_rw,
+          request_dma => request_dma,
+          ack_request => ack_request,
           interrupt => interrupt,
           bitrate_valid => bitrate_valid,
           tx_ready => tx_ready,
@@ -143,7 +157,9 @@ BEGIN
    stim_proc: process
    begin		
       -- hold reset state for 100 ns.
+      reset <= '1';
       wait for 100 ns;	
+      reset <= '0';
 
       wait for clk_period*10;
       wait for clk_period/2;
@@ -156,8 +172,8 @@ BEGIN
       wait for clk_period;
       
       pselect <= '0';
-      address <= "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
-      read <= '0';
+      address <= "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
+      read <= 'L';
       
       wait for clk_period*2;
       
@@ -168,10 +184,11 @@ BEGIN
       wait for clk_period;
       
       pselect <= '0';
-      address <= "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
-      read <= '0';
+      address <= "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
+      data <= "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
+      read <= 'L';
       
-      wait for clk_period*2;
+      wait for clk_period;
       
       pselect <= '1';
       address <= "000000000000000000000000001000";
@@ -181,9 +198,23 @@ BEGIN
       wait for clk_period;
       
       pselect <= '0';
-      address <= "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
-      data <= "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
-      write <= '0';
+      address <= "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
+      data <= "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
+      write <= 'L';
+      
+      wait for clk_period;
+      
+      pselect <= '1';
+      address <= "000000000000000000000000001000";
+      data <= "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
+      read <= '1';
+      
+      wait for clk_period;
+      
+      pselect <= '0';
+      address <= "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
+      data <= "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
+      read <= 'L';
 
       wait;
    end process;
